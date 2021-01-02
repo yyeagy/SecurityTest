@@ -4,7 +4,8 @@ const express = require("express");
 const bodyParser = require("body-parser"); 
 const _ = require('lodash');
 const mongoose = require('mongoose');
-var md5 = require("md5")
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
 
 const app = express();
 app.set('view engine', 'ejs');
@@ -15,7 +16,8 @@ mongoose.connect(process.env.DB_URI,{useNewUrlParser: true, useUnifiedTopology:t
 
 const usersSchema = new mongoose.Schema({
     email: String,
-    password: String
+    salt: String,
+    password: String 
   });   
   
 const User = mongoose.model("User", usersSchema);
@@ -33,8 +35,19 @@ app.post("/login", (req, res) => {
         if(err)
             return res.send(err);
       
-        if(result && result.password === md5(req.body.password)){
-            res.render("secrets");
+            
+
+        if(result){
+            bcrypt.compare(req.body.password, result.password, function(err, checkResult) {
+                if( checkResult){
+                    res.render("secrets");
+                }
+                else
+                {
+                    res.send("log in failed");
+                }
+            });
+           
         }
         else{
             res.send("log in failed");
@@ -47,15 +60,24 @@ app.get("/register", (req, res) => {
 }); 
 
 app.post("/register", (req, res) => {
-    const newUser = new User({
-        email: req.body.username,
-        password: md5(req.body.password)
+
+    bcrypt.genSalt(saltRounds, function(err, salt) {
+        bcrypt.hash(req.body.password, salt, function(err, hash) {
+            // Store hash in your password DB.
+            const newUser = new User({
+                email: req.body.username,
+                password: hash,
+                salt: salt
+            });
+            newUser.save((err, result) => {
+                if(err)
+                   return res.send(err);
+                res.render("secrets");
+            });
+        });
     });
-    newUser.save((err, result) => {
-        if(err)
-           return res.send(err);
-        res.render("secrets");
-    });
+
+   
 });
 
 app.listen(process.env.PORT||3000, function() {
